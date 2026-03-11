@@ -1,5 +1,13 @@
 # わかった気になる Media over QUIC
 
+## 要約
+
+- MoQ は QUIC / MoQT / MSF の 3 層からなるプロトコル群
+- MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用している
+- MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
+- Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
+- Pull 型フローは、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
+
 ## この資料は何か
 
 ソフトウェアエンジニア向けに、MoQ (Media over QUIC) の概要を説明するための資料。
