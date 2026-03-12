@@ -2,29 +2,33 @@
 
 ## この資料は何か
 
-ソフトウェアエンジニア向けに、MoQ (Media over QUIC) の概要を説明する資料。
+ソフトウェアエンジニア向けに、MoQ (Media over QUIC) の概要を説明した資料。
 
-この資料の目的は、MoQ (特に Media over QUIC Transport) を概要レベルで理解すること。
-具体的には、映像・音声データをどのようにモデリングし、どのように配信するかを説明する。
+この資料の目的は、読者が MoQ (特に Media over QUIC Transport) を概要レベルで理解できるようになること。
+
+具体的には、MoQ が
+1. 映像・音声データをどのようにモデリングするか
+2. それをどのように配信するか
+の 2 つ を特に理解してもらいたい。
 
 > [!NOTE]
 > この資料では下記のテーマは扱わない。
 > - MoQ が生まれた背景や既存技術 (WebRTC, HLS/DASH) との比較
-> - 各仕様 (MSF, LOC, CMSF, QUIC, WebTransport) の詳細
+> - MoQ に関連する仕様 (MSF, LOC, CMSF, QUIC, WebTransport) の詳細
 
 ## 要約
 
 時間がない人向けに、この資料のポイントをまとめる。
 
 - MoQ はトランスポート (QUIC) / メディア配信 (MoQT) / メディア形式 (MSF) の 3 層からなるプロトコル群
-- MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用している
+- MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用する
 - MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
 - Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
 - Pull 型フローは、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
 
 ## MoQ とは何か
 
-MoQ (Media over QUIC) とは、QUIC を上手く使ってメディア (映像・音声) を配信するためのプロトコル群である。
+MoQ (Media over QUIC) とは、QUIC を **上手く使って** メディア (映像・音声) を配信するためのプロトコル群である。
 
 ```
 ┌──────────────────────────────────────────┐
@@ -40,19 +44,57 @@ MoQ (Media over QUIC) とは、QUIC を上手く使ってメディア (映像・
 └──────────────────────────────────────────┘ ┘
 ```
 
-QUIC は、TCP と同等の機能を持ちつつ HoL blocking を解消したプロトコルである。
+> [!NOTE]
+> ブラウザからは WebTransport 経由で QUIC を使う。
 
-- TCP と同様に信頼性のある通信 (再送・順序保証・輻輳制御・フロー制御) ができる
-- 1 つの接続の中に複数の独立した Stream を持てる
+### QUIC
 
-> [!IMPORTANT]
-> ある Stream のパケットロスが他の Stream をブロック (HoL blocking) しない。ここが TCP とは違う。
-- ブラウザからは WebTransport (over HTTP/3) 経由、ネイティブでは QUIC を直接使う
+QUIC は、TCP のような信頼性のある通信と、独立したストリームの多重化を提供するトランスポートプロトコルである。
+
+- TCP と同様に、信頼性のある通信 (再送・順序保証・輻輳制御・フロー制御) ができる
+- TCP と異なり、1 つの接続の中に複数の独立した Stream を持てる (Stream 多重化)
+
+MoQ は QUIC Stream の独立性を活かして設計されている。
+この性質は理解しておいてほしいので、TCP 上での Stream 多重化と QUIC の Stream 多重化の違いを図で説明する。
+
+TCP 上で複数の Stream を多重化する (HTTP/2 がこれにあたる) と、TCP は全データを 1 本のバイトストリームとして扱うため、1 つのパケットロスが全 Stream をブロックする (HoL blocking)。
+
+```
+  TCP バイトストリーム (実際の転送)
+  [A][B][A][C][✕][B][C][A]...
+                ↑ パケットロス → ここ以降の全データがブロック
+
+  HTTP/2 Stream (アプリケーションから見た状態)
+  Stream A: ■ ■ □ □ □   ← ブロック
+  Stream B: ■ □ □ □ □   ← ブロック
+  Stream C: ■ □ □ □ □   ← ブロック
+
+  ■ 配送済み  □ ブロック中  ✕ ロスしたパケット
+```
+
+QUIC では、Stream ごとに独立したバイトストリームを持つ。パケットがロスしても、影響は該当 Stream に閉じる。
+
+```
+  UDP データグラム (実際の転送)
+  [A][B][A][C][✕][B][C][A]...
+                ↑ パケットロス (後続のデータグラムはブロックしない)
+
+  QUIC Stream (アプリケーションから見た状態)
+  Stream A: ■ ■ □ □ □   ← 再送待ち
+  Stream B: ■ ■ ■ ■ ■   ← 影響なし
+  Stream C: ■ ■ ■ ■ ■   ← 影響なし
+
+  ■ 配送済み  □ 再送待ち  ✕ ロスしたパケット
+```
+
+### MoQT
 
 MoQT (Media over QUIC Transport) は、QUIC の上に乗るメディア配信プロトコル。主に 2 つを定義している。
 
 1. 映像・音声データをどう構造化するか (データモデル: Track / Group / Subgroup / Object)
 2. 中継サーバーである Relay を介してスケーラブルに配信するための Pub/Sub の仕組み
+
+### MSF
 
 MSF (MoQT Streaming Format) は、MoQT の上に乗るメディア形式の仕様。主に 2 つを定義している。
 
