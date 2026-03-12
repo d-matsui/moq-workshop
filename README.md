@@ -1,28 +1,26 @@
 # わかった気になる Media over QUIC
 
-## 要約
-
-- MoQ は QUIC / MoQT / MSF の 3 層からなるプロトコル群
-- MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用している
-- MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
-- Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
-- Pull 型フローは、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
-
 ## この資料は何か
 
 ソフトウェアエンジニア向けに、MoQ (Media over QUIC) の概要を説明する資料。
 
-この資料の目的は、読者が下記を理解すること。
-
-- MoQ のプロトコルスタックの全体像 (QUIC / MoQT / MSF)
-- MoQT のデータモデル (Track / Group / Subgroup / Object)
-- MoQT の Pub/Sub の仕組み (セッション確立からデータ転送まで)
+この資料の目的は、MoQ (特に Media over QUIC Transport) を概要レベルで理解すること。
+具体的には、映像・音声データをどのようにモデリングし、どのように配信するかを説明する。
 
 > [!NOTE]
 > この資料では下記のテーマは扱わない。
-> - MSF / LOC / CMSF の詳細
-> - QUIC / WebTransport の詳細
-> - WebRTC や HLS/DASH との比較
+> - MoQ が生まれた背景や既存技術 (WebRTC, HLS/DASH) との比較
+> - 各仕様 (MSF, LOC, CMSF, QUIC, WebTransport) の詳細
+
+## 要約
+
+時間がない人向けに、この資料のポイントをまとめる。
+
+- MoQ はトランスポート (QUIC) / メディア配信 (MoQT) / メディア形式 (MSF) の 3 層からなるプロトコル群
+- MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用している
+- MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
+- Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
+- Pull 型フローは、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
 
 ## MoQ とは何か
 
@@ -35,7 +33,7 @@ MoQ (Media over QUIC) とは、QUIC を上手く使ってメディア (映像・
 │    Media over QUIC Transport (MoQT)      │ メディア配信プロトコル
 ├──────────────────┬───────────────────────┤ ┐
 │                  │      WebTransport     │ │
-│                  ├───────────────────────┤ │ 通信プロトコル
+│                  ├───────────────────────┤ │ トランスポートプロトコル
 │                  │        HTTP/3         │ │
 │                  └───────────────────────┤ │
 │                   QUIC                   │ │
@@ -326,7 +324,7 @@ Subscriber が `SUBSCRIBE_OK` を受け取ると、Publisher から Relay を経
 
 この資料では、MoQ の全体像と MoQT の基本を説明した。
 
-- MoQ は QUIC / MoQT / MSF の 3 層からなるプロトコル群
+- MoQ はトランスポート (QUIC) / メディア配信 (MoQT) / メディア形式 (MSF) の 3 層からなるプロトコル群
 - MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用している
 - MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
 - Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
