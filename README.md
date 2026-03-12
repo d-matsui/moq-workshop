@@ -112,7 +112,7 @@ MoQT は主に 2 つを定義している。
 ### データモデル
 
 MoQT では、映像や音声のデータを Track > Group > Subgroup > Object の階層構造で表現する。
-> [!NOTE]
+> [!WARNING]
 > MoQT 自体は、各階層に何をマッピングするかを規定していない。ここでは、わかりやすさのために、MSF + LOC に沿って説明する。
 
 ```
@@ -346,3 +346,12 @@ MoQ には他にも多くのテーマがある。
 - 認証 — Authorization Token によるセッション・Track レベルの認証
 - セッション管理 — `GOAWAY` によるセッション移行、エラーコード、タイムアウト
 - MSF / LOC / CMSF — カタログ、タイムライン、コンテナフォーマットの詳細
+
+### 参考仕様
+
+- [MoQT (Media over QUIC Transport)](https://datatracker.ietf.org/doc/draft-ietf-moq-transport/)
+- [MSF (MoQT Streaming Format)](https://datatracker.ietf.org/doc/draft-ietf-moq-msf/)
+- [LOC (Low Overhead Container)](https://datatracker.ietf.org/doc/draft-ietf-moq-loc/)
+- [CMSF (Common MoQT Streaming Format)](https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/)
+- [QUIC (RFC 9000)](https://datatracker.ietf.org/doc/rfc9000/)
+- [WebTransport (RFC 9220)](https://datatracker.ietf.org/doc/rfc9220/)
