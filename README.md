@@ -18,11 +18,11 @@
 - MoQT のデータモデル (Track / Group / Subgroup / Object)
 - MoQT の Pub/Sub の仕組み (セッション確立からデータ転送まで)
 
-この資料では、下記のテーマは扱わない。
-
-- MSF / LOC / CMSF の詳細
-- QUIC / WebTransport の詳細
-- WebRTC や HLS/DASH との比較
+> [!NOTE]
+> この資料では下記のテーマは扱わない。
+> - MSF / LOC / CMSF の詳細
+> - QUIC / WebTransport の詳細
+> - WebRTC や HLS/DASH との比較
 
 ## MoQ とは何か
 
@@ -46,7 +46,9 @@ QUIC は、TCP と同等の機能を持ちつつ HoL blocking を解消したプ
 
 - TCP と同様に信頼性のある通信 (再送・順序保証・輻輳制御・フロー制御) ができる
 - 1 つの接続の中に複数の独立した Stream を持てる
-  - ある Stream のパケットロスが他の Stream をブロック (HoL blocking) しない (ここが TCP とは違う!)
+
+> [!IMPORTANT]
+> ある Stream のパケットロスが他の Stream をブロック (HoL blocking) しない。ここが TCP とは違う。
 - ブラウザからは WebTransport (over HTTP/3) 経由、ネイティブでは QUIC を直接使う
 
 MoQT (Media over QUIC Transport) は、QUIC の上に乗るメディア配信プロトコル。主に 2 つを定義している。
@@ -94,11 +96,11 @@ MoQ では、この GoP を 1 つの QUIC Stream に乗せる。
   GoP 3  ──→  QUIC Stream 3: [I][P][P][P][P]...
 ```
 
-このマッピングにより、QUIC Stream の性質を以下のように利用できる。
-
-- GoP 内のフレームは順序通りに届く必要がある → Stream は順序保証してくれる
-- GoP ごとに独立した Stream になる → ある GoP のパケットロスが、別の GoP の配信をブロックしない
-- 古くなった GoP を途中で破棄できる → Stream 単位でキャンセルできる。リアルタイム配信で遅延が蓄積した場合に、古い GoP を破棄できる
+> [!TIP]
+> このマッピングにより、QUIC Stream の性質を以下のように利用できる。
+> - GoP 内のフレームは順序通りに届く必要がある → Stream は順序保証してくれる
+> - GoP ごとに独立した Stream になる → ある GoP のパケットロスが、別の GoP の配信をブロックしない
+> - 古くなった GoP を途中で破棄できる → Stream 単位でキャンセルできる。リアルタイム配信で遅延が蓄積した場合に、古い GoP を破棄できる
 
 ## Media over QUIC Transport (MoQT)
 
@@ -110,7 +112,8 @@ MoQT は主に 2 つを定義している。
 ### データモデル
 
 MoQT では、映像や音声のデータを Track > Group > Subgroup > Object の階層構造で表現する。
-MoQT 自体は、各階層に何をマッピングするかを規定していない。ここでは、わかりやすさのために、MSF + LOC に沿って説明する。
+> [!NOTE]
+> MoQT 自体は、各階層に何をマッピングするかを規定していない。ここでは、わかりやすさのために、MSF + LOC に沿って説明する。
 
 ```
 // Track > Group > Subgroup > Object の階層構造
@@ -202,12 +205,12 @@ Publisher ── Relay
 
 各 Relay が Object を下流に転送 (fan-out) することで、スケーラブルな配信を実現する。
 
-MoQT では、Track の購読開始方法に 2 種類ある。
-
-1. Subscriber 側から始める方法 (Pull 型と呼ぶことにする)
-2. Publisher 側から始める方法 (Push 型と呼ぶことにする)
-
-この資料では、わかりやすさのために Pull 型のフローのみを説明する。
+> [!NOTE]
+> MoQT では Track の購読開始方法に 2 種類ある。
+> 1. Subscriber 側から始める方法 (Pull 型と呼ぶことにする)
+> 2. Publisher 側から始める方法 (Push 型と呼ぶことにする)
+>
+> この資料では、わかりやすさのために Pull 型のフローのみを説明する。
 
 ### Pull 型フローの全体像
 
