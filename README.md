@@ -207,12 +207,12 @@ Group は途中参加ポイント (join point) として機能する。途中か
 Group の中はさらに Subgroup で区切られる。
 1 Subgroup が 1 QUIC Stream にマッピングされる。
 先ほどの例では 1 Group = 1 Subgroup なので、GoP がそのまま 1 つの QUIC Stream に対応する。
-1 Group に複数の Subgroup を持たせることもでき、その場合は 1 つの GoP が複数の QUIC Stream に分かれる (後述の [SVC を使う映像](#より実践的な例-svc-を使う映像) を参照)。
+1 Group に複数の Subgroup を持たせることもでき、その場合は 1 つの GoP が複数の QUIC Stream に分かれる。
 
 Object は MoQT における最小のデータ単位で、MSF では映像の 1 フレームが 1 Object に対応する。
 
 <details>
-<summary>より実践的な例: SVC を使う映像</summary>
+<summary>より実践的な例: 複数の Subgroup を使う映像 (SVC)</summary>
 
 先ほどの例では 1 Group = 1 Subgroup にしていた。
 SVC (Scalable Video Coding) では、1 つの映像を Base Layer (低品質) と Enhancement Layer (高品質) に分けてエンコードする。
