@@ -211,7 +211,8 @@ Group の中はさらに Subgroup で区切られる。
 
 Object は MoQT における最小のデータ単位で、MSF では映像の 1 フレームが 1 Object に対応する。
 
-#### より実践的な例: SVC を使う映像
+<details>
+<summary>より実践的な例: SVC を使う映像</summary>
 
 先ほどの例では 1 Group = 1 Subgroup にしていた。
 SVC (Scalable Video Coding) では、1 つの映像を Base Layer (低品質) と Enhancement Layer (高品質) に分けてエンコードする。
@@ -248,6 +249,8 @@ Track: "Alice の映像 (SVC)"
 │       └── ...
 ...
 ```
+
+</details>
 
 ### Relay による配信のスケール
 
