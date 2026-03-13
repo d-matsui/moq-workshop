@@ -6,7 +6,7 @@
 
 この資料の目的は、読者が MoQ (特に Media over QUIC Transport) を概要レベルで理解できるようになること。
 
-具体的には、MoQ が
+具体的には、
 1. 映像・音声データをどのようにモデリングするか
 2. それをどのように配信するか
 の 2 つ を特に理解してもらいたい。
@@ -20,7 +20,7 @@
 
 時間がない人向けに、この資料のポイントをまとめる。
 
-- MoQ はトランスポート (QUIC) / データモデル + Pub/Sub (MoQT) / メディアの記述 + MoQT への乗せ方 (MSF) の 3 層からなるプロトコル群
+- MoQ は QUIC (トランスポート), MoQT (データモデル + Pub/Sub), MSF (メディアの記述 + MoQT への乗せ方) で構成されるプロトコル群
 - MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用する
 - MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
 - Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
@@ -30,93 +30,108 @@
 
 MoQ (Media over QUIC) とは、QUIC を上手く使ってメディア (映像・音声) を配信するためのプロトコル群である。
 
-MoQ のプロトコルスタックは、シンプルに捉えると以下の 3 層で構成されている。それぞれを順に説明する。
+MoQ のプロトコルスタックは、シンプルに捉えると以下の 3 層で構成されている。
 
 ```
 ┌──────────────────────────────────────────┐
-│    MoQT Streaming Format (MSF)           │ メディアの記述方法 + MoQT への乗せ方
+│    MoQT Streaming Format (MSF)           │ 3. メディアの記述方法 + MoQT への乗せ方
 ├──────────────────────────────────────────┤
-│    Media over QUIC Transport (MoQT)      │ データモデル + Pub/Sub
+│    Media over QUIC Transport (MoQT)      │ 2. データモデル + Pub/Sub
 ├──────────────────┬───────────────────────┤ ┐
 │                  │      WebTransport     │ │
-│                  ├───────────────────────┤ │ トランスポートプロトコル
-│                  │        HTTP/3         │ │
+│                  ├───────────────────────┤ │
+│                  │        HTTP/3         │ │ 1. トランスポート
 │                  └───────────────────────┤ │
 │                   QUIC                   │ │
 └──────────────────────────────────────────┘ ┘
 ```
 
 > [!NOTE]
-> ブラウザからは WebTransport 経由で QUIC を使う。
+> ブラウザからは WebTransport over HTTP/3 経由で QUIC を使う。
 
-### QUIC
+それぞれを順に説明する。
+
+### 1. QUIC
 
 QUIC は、TCP のような信頼性のある通信と、独立したストリームの多重化を提供するトランスポートプロトコルである。
 
 - TCP と同様に、信頼性のある通信 (再送・順序保証・輻輳制御・フロー制御) ができる
 - TCP と異なり、1 つの接続の中に複数の独立した Stream を持てる (Stream 多重化)
 
-MoQ は QUIC Stream の独立性を活かして設計されている。
+MoQ は Stream の独立性を活かして設計されている。
 この性質は理解しておいてほしいので、TCP 上での Stream 多重化と QUIC の Stream 多重化の違いを図で説明する。
 
 TCP 上で複数の Stream を多重化する (HTTP/2 がこれにあたる) と、TCP は全データを 1 本のバイトストリームとして扱うため、1 つのパケットロスが全 Stream をブロックする (Head-of-Line blocking)。
 
 ```
-  // TCP バイトストリーム (実際の転送)
+  // TCP バイトストリーム (受信側)
   [A][B][A][C][✕][B][C][A]...
-                ↑ パケットロス → ここ以降の全データがブロック
+                ↑ ロス → 再送されるまで後続のデータがブロックされる
 
   // HTTP/2 Stream (アプリケーションから見た状態)
   Stream A: ■ ■ □ □ □   ← ブロック
   Stream B: ■ □ □ □ □   ← ブロック
   Stream C: ■ □ □ □ □   ← ブロック
 
-  ■ 配送済み  □ ブロック中  ✕ ロスしたパケット
+  ■ 受信済み  □ ブロック中  ✕ ロスしたパケット
 ```
 
-QUIC は UDP ベースのプロトコルで、Stream ごとに独立したバイトストリームを持てる。パケットがロスしても、影響は該当 Stream に閉じる。
+一方、QUIC は UDP ベースのプロトコルで、Stream ごとに独立したバイトストリームを持てる。パケットがロスしても、影響は該当 Stream に閉じる。
 
 ```
-  // UDP データグラム (実際の転送)
+  // UDP データグラム (受信側)
   [A][B][A][C][✕][B][C][A]...
-                ↑ パケットロス (後続のデータグラムはブロックしない)
+                ↑ ロス (後続のデータはブロックされない)
 
   // QUIC Stream (アプリケーションから見た状態)
   Stream A: ■ ■ □ □ □   ← 再送待ち
   Stream B: ■ ■ ■ ■ ■   ← 影響なし
   Stream C: ■ ■ ■ ■ ■   ← 影響なし
 
-  ■ 配送済み  □ 再送待ち  ✕ ロスしたパケット
+  ■ 受信済み  □ 再送待ち  ✕ ロスしたパケット
 ```
 
-### MoQT
+MoQ はこの性質を活かし、映像・音声のデータを適切な粒度で Stream に分けて送信する。詳しくは後述する。
 
-MoQT (Media over QUIC Transport) は、QUIC の上に乗るデータ配信プロトコルである。
-MoQT は映像・音声に限らず汎用的なデータ配信の仕組みである。
-主に下記の 2 つを定義している。この資料では、MoQT を中心に説明する。
+### 2. MoQT
 
-1. 映像・音声データをどう構造化するか (データモデル: Track / Group / Subgroup / Object)
+MoQT (Media over QUIC Transport) は、QUIC 上で汎用的なデータ配信を行うためのプロトコルである。
+主に下記の 2 つを定義している。
+
+1. データをどう構造化するか (Track / Group / Subgroup / Object)
 2. 中継サーバーである Relay を介してスケーラブルに配信するための Pub/Sub の仕組み
 
-### MSF
+MoQT は、データをどう構造化し、どう届けるかという配信のアーキテクチャそのものを定義しており、MoQ の中核にあたる。
+この資料では、MoQT を中心に説明する。
 
-MSF (MoQT Streaming Format) は、MoQT 上に映像・音声を乗せるための仕様で、主に 2 つを定義している。
+### 3. MSF
+
+MSF (MoQT Streaming Format) は、MoQT 上にどう映像・音声を乗せるかを定めた仕様で、主に下記の 2 つを定義している。
 
 1. どのような映像・音声を配信しているかの記述方法
-2. 映像・音声をどう区切って送るかのルール
+2. 映像・音声をどう区切ってMoQT上で送るかのルール
 
-雰囲気だけ伝えると、配信したい映像のコーデック・解像度・フレームレートなどの情報を、カタログと呼ばれる JSON に記述する。受信側はこのカタログを購読することで、どのような映像・音声が配信されているかを知ることができる。
+この資料では、それぞれ雰囲気だけ伝える。
 
-また、映像の 1 フレームを Object というデータ構造にマッピングして送る (Object については後述する)。
+記述方法については、配信したい映像のコーデック・解像度・フレームレートなどの情報を、カタログと呼ばれる JSON に記述する。
+配信側はこのカタログを Track (MoQT のデータ構造の一つ) として配信する。
+受信側はその Track を購読することで、どのような映像・音声が配信されているかを知ることができる。
+
+乗せ方については、例えば映像の 1 フレームを Object (これも MoQT のデータ構造の一つ) にマッピングして送る。
+
+> [!NOTE]
+> MSF では、LOC (Low Overhead Media Container) という仕様に基づき、エンコード済みの 1 フレームを 1 Object にマッピングする。
+> また、HLS/DASH などで使われる fMP4 (fragmented MP4) セグメントを Object にマッピングする CMSF という MSF の拡張仕様もある。
 
 ## MoQ は QUIC をどう上手く使うのか
 
-プロトコルの詳細に入る前に、MoQ の概要を把握してほしい。
-MoQ が映像を QUIC Stream にどう乗せるかを説明する。
+プロトコルの詳細に入る前に、MoQ がメディアデータをどのように QUIC Stream に乗せるかのイメージを掴んでほしい。
+ここでは、映像を例に、メディアデータがどのように分割され QUIC Stream にマッピングされるかを説明する。
 
 
 映像を送るには、映像データをどう分割して送るかが問題になる。
-MoQ はこの分割単位として GoP を使い、各 GoP を 1 つの QUIC Stream にマッピングする。以下で詳しく見ていく。
+MoQ はこの分割単位として GoP (Group of Pictures) を使い、各 GoP を 1 つの QUIC Stream にマッピングする。
+以下で詳しく見ていく。
 
 映像は通常、フレーム (= 1 枚の画像) の連続として表現される。
 フレームをそのまま送るとデータ量が大きいので、映像コーデックを使って圧縮する。
@@ -133,7 +148,7 @@ MoQ はこの分割単位として GoP を使い、各 GoP を 1 つの QUIC Str
 ```
 
 I-frame を先頭に、後続の P-frame をまとめた単位を GoP (Group of Pictures) と呼ぶ。
-GoP 内のフレームは先頭の I-frame から順にデコードする必要がある。
+GoP 内のフレームは先頭の I-frame から順にデコードする必要がある (P-frame は前のフレームとの差分なので、先行するフレームがないとデコードできないため)。
 例えば、30fps でキーフレーム間隔が 1 秒の映像なら、1 つの GoP は I-frame 1 枚 + P-frame 29 枚 = 30 フレームになる。
 
 MoQ では、この GoP を 1 つの QUIC Stream に乗せる。
@@ -144,24 +159,24 @@ MoQ では、この GoP を 1 つの QUIC Stream に乗せる。
   GoP 3  ──→  QUIC Stream 3: [I][P][P][P][P]...
 ```
 
-> [!TIP]
-> このマッピングにより、QUIC Stream の性質を以下のように利用できる。
-> - GoP 内のフレームは順序通りに届く必要がある → Stream は順序保証してくれる
-> - GoP ごとに独立した Stream になる → ある GoP のパケットロスが、別の GoP の配信をブロックしない
-> - 古くなった GoP を途中で破棄できる → Stream 単位でキャンセルできる。リアルタイム配信で遅延が蓄積した場合に、古い GoP を破棄できる
+このマッピングにより、QUIC Stream の性質を以下のように利用できる。
+
+- GoP 内のフレームは順序通りに届く必要がある → Stream は順序保証してくれる
+- GoP ごとに独立した Stream になる → ある GoP のパケットロスが、別の GoP の配信をブロックしない。例えば、古い GoP で再送待ちが発生しても、新しい GoP はブロックされずに届く
 
 ## Media over QUIC Transport (MoQT)
 
-MoQT は主に 2 つを定義している。
-
-1. 映像・音声データをどう構造化するか (データモデル)
-2. Relay を介した Pub/Sub の仕組み
+ここからは、MoQT のデータモデルと Pub/Sub の仕組みを詳しく説明する。
 
 ### データモデル
 
-MoQT では、映像や音声のデータを Track > Group > Subgroup > Object の階層構造で表現する。
+MoQT のデータモデルは、映像や音声などのデータを Track > Group > Subgroup > Object の階層構造で表現する。
+
 > [!WARNING]
-> MoQT 自体は、各階層に何をマッピングするかを規定していない。ここでは、わかりやすさのために、MSF + LOC に沿って説明する。
+> MoQT 自体は各階層構造それぞれに何をマッピングするかを規定していない。
+> ここでは、わかりやすさのために MSF に沿って映像を例に説明する。
+
+例えば、Alice の映像配信は下記の階層構造になる。
 
 ```
 // Track > Group > Subgroup > Object の階層構造
@@ -181,25 +196,25 @@ Track: "Alice の映像"
 ...
 ```
 
-Track は、メディアの論理的な単位。
+Track は、メディアの論理的な単位である。
 例えば「Alice の映像」や「Alice の音声」がそれぞれ 1 つの Track に対応する。
 Subscriber は、この Track 単位でデータを購読する。
 
-Group は、Track を区切る単位で、Track 内の join point (途中参加ポイント) になる。
-途中から購読した Subscriber は、Group の境界から受信を開始できる。映像の場合、GoP が Group に相当する。
+Track の中は Group で区切られる。
+Group は途中参加ポイント (join point) になり、途中から購読した Subscriber は Group の境界から受信を開始できる。
+映像の場合、GoP が Group に相当する。
 
-Subgroup は、Group 内の Object を細分化する単位。
+Group の中はさらに Subgroup で区切られる。
 1 Subgroup が 1 QUIC Stream にマッピングされる。
-上の図では、シンプルな構成 (1 Group = 1 Subgroup) にしている。
+[MoQ は QUIC をどう上手く使うのか](#moq-は-quic-をどう上手く使うのか) で説明した通り、1 Group = 1 Subgroup の場合、GoP がそのまま 1 つの QUIC Stream に対応する。
+1 Group に複数の Subgroup がある場合は、1 つの GoP が複数の QUIC Stream に分かれる (後述の [SVC を使う映像](#より実践的な例-svc-を使う映像) を参照)。
 
-Object は、MoQT における最小のデータ単位。
-映像であれば、1 フレームが 1 Object に対応する。
+Object は MoQT における最小のデータ単位で、MSF では映像の 1 フレームが 1 Object に対応する。
 
 #### より実践的な例: SVC を使う映像
 
-シンプルな映像なら 1 Group に 1 Subgroup で十分である。しかし、SVC (Scalable Video Coding) のようにレイヤーが分かれる場合は、レイヤーごとに Subgroup を分ける。
-Subgroup が分かれると QUIC Stream も分かれる。
-そのため、帯域不足時に Enhancement Layer の Stream だけを破棄して、Base Layer だけで再生を続ける、といった制御ができる。
+先ほどの例では 1 Group = 1 Subgroup にしていた。SVC (Scalable Video Coding) のように、1 つの映像を Base Layer (低品質) と Enhancement Layer (高品質) のように複数のレイヤーに分けてエンコードする場合は、レイヤーごとに Subgroup を分けることができる。Subgroup が分かれると QUIC Stream も分かれるため、Base Layer を優先して配信したり、帯域不足時に Enhancement Layer だけを落としたりといった制御ができる。
+Base Layer だけでも再生は可能なので、品質を下げつつ配信を継続できる。
 
 ```
 Track: "Alice の映像 (SVC)"
@@ -210,9 +225,9 @@ Track: "Alice の映像 (SVC)"
 │   │   ├── Object 2 (P-frame)
 │   │   └── ...
 │   └── Subgroup 1 (Enhancement Layer)
-│       ├── Object 0
-│       ├── Object 1
-│       ├── Object 2
+│       ├── Object 0 (enhancement data)
+│       ├── Object 1 (enhancement data)
+│       ├── Object 2 (enhancement data)
 │       └── ...
 ├── Group 1 (GoP)
 │   ├── Subgroup 0 (Base Layer)
@@ -221,9 +236,9 @@ Track: "Alice の映像 (SVC)"
 │   │   ├── Object 2 (P-frame)
 │   │   └── ...
 │   └── Subgroup 1 (Enhancement Layer)
-│       ├── Object 0
-│       ├── Object 1
-│       ├── Object 2
+│       ├── Object 0 (enhancement data)
+│       ├── Object 1 (enhancement data)
+│       ├── Object 2 (enhancement data)
 │       └── ...
 ...
 ```
