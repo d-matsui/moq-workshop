@@ -1,23 +1,29 @@
 # わかった気になる Media over QUIC
 
-## この資料は何か
+## はじめに
 
-ソフトウェアエンジニア向けに、MoQ (Media over QUIC) の概要を説明した資料。
+### この資料は何か
 
-この資料の目的は、読者が MoQ (特に Media over QUIC Transport) を概要レベルで理解できるようになること。
+ソフトウェアエンジニア向けに MoQ (Media over QUIC) の概要を説明した資料。
 
-具体的には、下記の 2 つ を特に理解してもらいたい。
-1. 映像・音声データをどのようにモデリングするか
-2. それをどのように配信するか
+MoQ の仕様 (Internet-Draft) は、いきなり読むにはハードルが高い。
+この資料は、配信技術に馴染みのないエンジニアでも MoQ の全体像や勘所をつかめるようにまとめたものである。
 
-> [!NOTE]
-> この資料では下記のテーマは扱わない。
-> - MoQ が生まれた背景や既存技術 (WebRTC, HLS/DASH) との比較
-> - MoQ に関連する仕様 (MSF, LOC, CMSF, QUIC, WebTransport) の詳細
+この資料で扱うテーマは以下の通り。
+- MoQ はどのようなプロトコル群か (QUIC / MoQT / MSF)
+- MoQ は QUIC をどう上手く使うのか
+- MoQT はデータをどう構造化するのか (データモデル)
+- Relay によって配信をどうスケールさせるのか
+- データはどのような流れで届くのか
 
-## 要約
+以下のテーマは扱わない。
+- MoQ はどういう経緯で生まれたのか
+- 既存技術 WebRTC, HLS/DASH との比較
+- 各仕様 (MSF, LOC, CMSF, QUIC/WebTransport など) の詳細
 
-時間がない人向けに、この資料のポイントをまとめる。
+### 要約
+
+先に結論を知りたい人向けに、この資料のポイントをまとめる。
 
 - MoQ は QUIC (トランスポート), MoQT (データモデル + Pub/Sub), MSF (メディアの記述 + MoQT への乗せ方) で構成されるプロトコル群
 - QUIC では Stream が独立しているため、パケットロスの影響を Stream 単位に閉じ込められる
@@ -404,7 +410,7 @@ Publisher                      Relay                      Subscriber
 
 ## まとめ
 
-この資料では、MoQ の全体像と MoQT の基本を説明した。
+この資料で説明したポイントをまとめる。
 
 - MoQ は QUIC (トランスポート), MoQT (データモデル + Pub/Sub), MSF (メディアの記述 + MoQT への乗せ方) で構成されるプロトコル群
 - QUIC では Stream が独立しているため、パケットロスの影響を Stream 単位に閉じ込められる
@@ -413,26 +419,30 @@ Publisher                      Relay                      Subscriber
 - Relay の fan-out と多段配置により、配信規模をスケールさせることができる
 - データ配信は、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
 
-## 話していないテーマ
+## もっと知りたい人へ
 
-この資料では MoQT の基本概念と Pull 型フローに絞って説明した。
 MoQ には他にも多くのテーマがある。
 
-- Push 型フロー — `PUBLISH` メッセージにより Publisher 側から購読を開始する仕組み
-- `FETCH` — 過去のデータを取得する仕組み。途中参加時に過去の Group を取得するなど
-- 優先制御 — Subscriber Priority / Publisher Priority / Group Order による送信順序の制御
-- 輻輳制御・フロー制御 — バッファブロート対策やスループット制御
-- Stream の種類と使い分け — 制御メッセージ用の双方向 Stream とデータ用の単方向 Stream
-- Relay の詳細 — キャッシュ、複数 Publisher の扱い、認可、Relay 切り替え (switchover)
-- 認証 — Authorization Token によるセッション・Track レベルの認証
-- セッション管理 — `GOAWAY` によるセッション移行、エラーコード、タイムアウト
-- MSF / LOC / CMSF — カタログ、タイムライン、コンテナフォーマットの詳細
+- MoQT (Media over QUIC Transport)
+  - 購読の詳細: 受け取る範囲の指定 (フィルタリング) など
+  - PUBLISH: Publisher 側から購読を開始する仕組み
+  - FETCH: 過去に配信済みのデータを取得する仕組み
+  - 優先制御: どのデータを優先して送るか
+  - Relay の詳細: キャッシュ、購読の集約など
+- MSF (MoQT Streaming Format): カタログとメディアの MoQT への乗せ方
+- LOC (Low Overhead Media Container): メディアのパッケージング形式
+- C4M (Common Access Tokens for MoQT): MoQT の認証方式
 
-## 参考仕様
+MoQ がなぜ生まれたのか、既存技術とどう違うのかを知りたい人は、下記が参考になる。
+
+- https://blog.cloudflare.com/moq/
+- https://moq.dev/blog/
+- https://doc.moq.dev/concept/
+
+各プロトコルの技術的な詳細を知りたい人は、下記のドラフトを読み進めるとよい。
 
 - [MoQT (Media over QUIC Transport)](https://datatracker.ietf.org/doc/draft-ietf-moq-transport/)
 - [MSF (MoQT Streaming Format)](https://datatracker.ietf.org/doc/draft-ietf-moq-msf/)
 - [LOC (Low Overhead Container)](https://datatracker.ietf.org/doc/draft-ietf-moq-loc/)
-- [CMSF (Common MoQT Streaming Format)](https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/)
-- [QUIC (RFC 9000)](https://datatracker.ietf.org/doc/rfc9000/)
-- [WebTransport (RFC 9220)](https://datatracker.ietf.org/doc/rfc9220/)
+- [CMSF (a CMAF compliant implementation of MOQT Streaming Format)](https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/)
+- [C4M (Authentication scheme for MOQT using Common Access Tokens)](https://datatracker.ietf.org/doc/draft-ietf-moq-c4m/)
