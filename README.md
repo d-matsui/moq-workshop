@@ -6,10 +6,9 @@
 
 この資料の目的は、読者が MoQ (特に Media over QUIC Transport) を概要レベルで理解できるようになること。
 
-具体的には、
+具体的には、下記の 2 つ を特に理解してもらいたい。
 1. 映像・音声データをどのようにモデリングするか
 2. それをどのように配信するか
-の 2 つ を特に理解してもらいたい。
 
 > [!NOTE]
 > この資料では下記のテーマは扱わない。
@@ -21,10 +20,11 @@
 時間がない人向けに、この資料のポイントをまとめる。
 
 - MoQ は QUIC (トランスポート), MoQT (データモデル + Pub/Sub), MSF (メディアの記述 + MoQT への乗せ方) で構成されるプロトコル群
-- MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用する
+- QUIC では Stream が独立しているため、パケットロスの影響を Stream 単位に閉じ込められる
+- MoQ はこの性質を活かし、メディアデータを適切な粒度 (GoP 単位) で Stream に分けて送る
 - MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
-- Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
-- Pull 型フローは、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
+- Relay の fan-out と多段配置により、配信規模をスケールさせることができる
+- データ配信は、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
 
 ## MoQ とは何か
 
@@ -172,9 +172,8 @@ MoQ では、この GoP を 1 つの QUIC Stream に乗せる。
 
 MoQT のデータモデルは、映像や音声などのデータを Track > Group > Subgroup > Object の階層構造で表現する。
 
-> [!WARNING]
-> MoQT 自体は各階層構造それぞれに何をマッピングするかを規定していない。
-> 以降では、わかりやすさのために MSF に沿って映像を例に説明する。
+MoQT 自体は各階層構造それぞれに何をマッピングするかを規定していない。
+以降では、わかりやすさのために MSF に沿って映像を例に説明する。
 
 例えば、Alice の映像配信は下記の階層構造になる。
 
@@ -213,7 +212,9 @@ Object は MoQT における最小のデータ単位で、MSF では映像の 1 
 
 #### より実践的な例: SVC を使う映像
 
-先ほどの例では 1 Group = 1 Subgroup にしていた。SVC (Scalable Video Coding) のように、1 つの映像を Base Layer (低品質) と Enhancement Layer (高品質) のように複数のレイヤーに分けてエンコードする場合は、レイヤーごとに Subgroup を分けることができる。Subgroup が分かれると QUIC Stream も分かれるため、Base Layer を優先して配信したり、帯域不足時に Enhancement Layer だけを落としたりといった制御ができる。
+先ほどの例では 1 Group = 1 Subgroup にしていた。
+SVC (Scalable Video Coding) のように、1 つの映像を Base Layer (低品質) と Enhancement Layer (高品質) のように複数のレイヤーに分けてエンコードする場合は、レイヤーごとに Subgroup を分けることができる。
+Subgroup が分かれると QUIC Stream も分かれるため、Base Layer を優先して配信したり、帯域不足時に Enhancement Layer だけを落としたりといった制御ができる。
 Base Layer だけでも再生は可能なので、品質を下げつつ配信を継続できる。
 
 ```
@@ -243,44 +244,51 @@ Track: "Alice の映像 (SVC)"
 ...
 ```
 
-### Relay を介した Pub/Sub の仕組み
+### Relay による配信のスケール
 
-次に、データの流れを説明する。
-
-MoQT では、Publisher (送信側) と Subscriber (受信側) が Relay (中継サーバー) を介して Pub/Sub でデータをやりとりする。
+MoQT では、Publisher (送信側) と Subscriber (受信側) が Relay (中継サーバー) を介してデータをやりとりする。
 
 ```
 Publisher ──→ Relay ──→ Subscriber
 ```
 
-Relay は、Publisher から見ると Subscriber、Subscriber から見ると Publisher として振る舞う。
-この性質により、Relay を多段に配置して CDN のようなツリー構造を構成できる。
+Relay は Object を下流の Subscriber に転送 (fan-out) するため、Publisher は全 Subscriber に直接送る必要がない。
 
 ```
-                    ┌──→ Subscriber
-              ┌── Relay
-              │     └──→ Subscriber
-Publisher ── Relay
-              │     ┌──→ Subscriber
-              └── Relay
-                    └──→ Subscriber
+Publisher ── Relay ──→ Subscriber
+               ├─────→ Subscriber
+               └─────→ Subscriber
 ```
 
-各 Relay が Object を下流に転送 (fan-out) することで、スケーラブルな配信を実現する。
+また、Relay は Publisher から見ると Subscriber、Subscriber から見ると Publisher として振る舞う。
+そのため、Relay 同士も接続でき、多段に配置すればさらに多くの Subscriber に配信できる。
 
-> [!NOTE]
-> MoQT では Track の購読開始方法に 2 種類ある。
-> 1. Subscriber 側から始める方法 (Pull 型と呼ぶことにする)
-> 2. Publisher 側から始める方法 (Push 型と呼ぶことにする)
->
-> この資料では、わかりやすさのために Pull 型のフローのみを説明する。
+```
+Publisher ── Relay ──→ Relay ──→ Subscriber
+               │         ├─────→ Subscriber
+               │         └─────→ Subscriber
+               │
+               └─────→ Relay ──→ Subscriber
+                         ├─────→ Subscriber
+                         └─────→ Subscriber
+```
 
-### Pull 型フローの全体像
+このように、Relay の追加によって配信規模をスケールさせることができる。
 
-ここでは、データが流れるまでの一連のフロー (セッション確立 → Namespace の発見 → Track の購読 → データ転送) を説明する。
+### データが届くまでの一連のフロー
 
-以下のシーケンス図が全体像である。
-各ステップを順に説明する。
+MoQT では、データ配信の始め方に 2 種類ある。
+1. Subscriber 側から始める方法 (Pull 型と呼ぶことにする)
+2. Publisher 側から始める方法 (Push 型と呼ぶことにする)
+
+この資料では、わかりやすさのために Pull 型のフローを説明する。
+
+Pull 型のフローでは、Publisher のデータが Subscriber に届くまでに、以下の 4 つのステップを踏む。
+1. セッション確立
+2. Namespace の発見
+3. Track の購読
+4. データ転送
+以下のシーケンス図をもとに、各ステップを順に説明する。
 
 ```
 Publisher                      Relay                      Subscriber
@@ -324,43 +332,58 @@ Publisher                      Relay                      Subscriber
     |                            |                            |
 ```
 
-Publisher と Subscriber はそれぞれ Relay に対して QUIC または WebTransport の接続を確立する。
-接続確立後、QUIC Stream 上で `SETUP` メッセージを交換する。
-`SETUP` で通信に必要な設定 (拡張機能など) を交渉する。
-これにより、MoQT のメッセージをやりとりする準備が整う。
+まず、Publisher と Subscriber がそれぞれ Relay に対して QUIC または WebTransport の接続を確立する。
+
+接続が確立すると、QUIC Stream 上で `SETUP` メッセージを交換し、通信に必要な設定 (拡張機能など) を交渉する。
+
+これにより、この後説明する PUBLISH_NAMESPACE や SUBSCRIBE などのやりとりができるようになる。
 
 #### Namespace の発見
 
-Track は、Track Namespace と Track Name の組み合わせで一意に識別される。
-(e.g, Namespace = "live/sports", Track Name = "video")
+次に、Subscriber が利用可能な Namespace を発見する。
 
-Subscriber が Track を購読するには、まずどんな Track が存在するかを知る必要がある。
-そのために `PUBLISH_NAMESPACE` と `SUBSCRIBE_NAMESPACE` メッセージを使う。
-<!-- 本当は? 別の方法で Namespace を知って、直接 Track を購読することも可能。この話をどうするか。 -->
+Track は、Track Namespace と Track Name の組み合わせで一意に識別される (例: Namespace = `"live/sports"`, Track Name = `"video"`)。
+Subscriber が Track を購読するには、まずどんな Namespace が存在するかを知る必要がある。
+
+例えば、Publisher が `"live/sports"` という Namespace の下に `"video"` と `"audio"` の Track を持っているとする。
+
+Publisher が `PUBLISH_NAMESPACE` メッセージを Relay に送り、`"live/sports"` を広告する。
+
+Subscriber は `SUBSCRIBE_NAMESPACE` メッセージを Relay に送り、prefix `"live"` に一致する Namespace の通知を要求する。
+
+Relay は一致する `"live/sports"` を `NAMESPACE` メッセージで Subscriber に通知する。
 
 ```
 Publisher                      Relay                      Subscriber
     |                            |                            |
     |---- PUBLISH_NAMESPACE ---->|                            |
-    |    "live/sports"           |                            |
+    |       "live/sports"        |                            |
     |<------- REQUEST_OK --------|                            |
     |                            |<--- SUBSCRIBE_NAMESPACE ---|
-    |                            |    prefix="live"           |
+    |                            |        prefix="live"       |
     |                            |-------- REQUEST_OK ------->|
     |                            |-------- NAMESPACE -------->|
-    |                            |    "live/sports"           |
+    |                            |        "live/sports"       |
     |                            |                            |
 ```
-
-例えば、Publisher が "live/sports" という Namespace の下に "video" と "audio" の Track を持っているとする。
-
-1. Publisher が `PUBLISH_NAMESPACE` で "live/sports" を Relay に広告する
-2. Subscriber が `SUBSCRIBE_NAMESPACE` で prefix "live" に一致する Namespace の通知を Relay に要求する
-3. Relay が `NAMESPACE` で「"live/sports" がある」と Subscriber に通知する
 
 これにより、Subscriber は利用可能な Namespace を把握できる。
 
 #### Track の購読とデータ転送
+
+最後に、Subscriber が Track を購読してから、データが届くまでを説明する。
+
+Namespace を知った Subscriber は、購読したい Track を指定して `SUBSCRIBE` メッセージを Relay に送る。
+
+> [!NOTE]
+> Track Name を知る方法は、この資料では省略している。
+> 通常、MSF のカタログを購読することで Subscriber は Track Name を知ることができる。
+
+Relay がまだその Track を購読していなければ、上流の Publisher に `SUBSCRIBE` メッセージを転送する。
+購読済みであれば、Relay はすぐに `SUBSCRIBE_OK` メッセージを Subscriber に返せる。
+
+Publisher が `SUBSCRIBE` メッセージを受け取り `SUBSCRIBE_OK` メッセージを返すと、Relay はそれを Subscriber に転送し、Object の転送が始まる。
+Relay は受け取った Object を Subscriber に転送する。
 
 ```
 Publisher                      Relay                      Subscriber
@@ -377,23 +400,18 @@ Publisher                      Relay                      Subscriber
     |                            |                            |
 ```
 
-Namespace を知った Subscriber は、Track を指定して `SUBSCRIBE` する。
-例えば、"live/sports" の "video" を購読する。
-
-Relay がまだその Track を購読していなければ、上流の Publisher に `SUBSCRIBE` を転送する。
-購読済みであれば、Relay はすぐに `SUBSCRIBE_OK` を返せる。
-
-Subscriber が `SUBSCRIBE_OK` を受け取ると、Publisher から Relay を経由して Object の転送が始まる。
+以上が、Publisher のデータが Subscriber に届くまでの一連のフローである。
 
 ## まとめ
 
 この資料では、MoQ の全体像と MoQT の基本を説明した。
 
-- MoQ はトランスポート (QUIC) / データモデル + Pub/Sub (MoQT) / メディアの記述 + MoQT への乗せ方 (MSF) の 3 層からなるプロトコル群
-- MoQ は GoP を QUIC Stream にマッピングすることで、QUIC の性質をうまく利用している
+- MoQ は QUIC (トランスポート), MoQT (データモデル + Pub/Sub), MSF (メディアの記述 + MoQT への乗せ方) で構成されるプロトコル群
+- QUIC では Stream が独立しているため、パケットロスの影響を Stream 単位に閉じ込められる
+- MoQ はこの性質を活かし、メディアデータを適切な粒度 (GoP 単位) で Stream に分けて送る
 - MoQT のデータモデルは Track > Group > Subgroup > Object の階層構造
-- Relay を介した Pub/Sub により、fan-out でスケーラブルな配信を実現する
-- Pull 型フローは、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
+- Relay の fan-out と多段配置により、配信規模をスケールさせることができる
+- データ配信は、セッション確立 → Namespace の発見 → Track の購読 → データ転送の順に進む
 
 ## 話していないテーマ
 
