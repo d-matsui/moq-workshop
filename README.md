@@ -69,37 +69,11 @@ MoQ は Stream の独立性を活かして設計されている。
 
 TCP 上で複数の Stream を多重化する場合 (HTTP/2 がこれにあたる)、TCP は全データを 1 本のバイトストリームとして扱う。そのため、1 つのパケットロスが全 Stream をブロックする (Head-of-Line blocking)。
 
-![TCP (HTTP/2) の Head-of-Line Blocking](hol-tcp.png)
-
-```
-  // TCP バイトストリーム (受信側)
-  [A][B][A][C][✕][B][C][A]...
-                ↑ ロス → 再送されるまで後続のデータがブロックされる
-
-  // HTTP/2 Stream (アプリケーションから見た状態)
-  Stream A: ■ ■ □ □ □   ← ブロック
-  Stream B: ■ □ □ □ □   ← ブロック
-  Stream C: ■ □ □ □ □   ← ブロック
-
-  ■ 受信済み  □ ブロック中  ✕ ロスしたパケット
-```
+![TCP (HTTP/2) の Head-of-Line Blocking](assets/hol-tcp.png)
 
 一方、QUIC は UDP ベースのプロトコルで、Stream ごとに独立したバイトストリームを持てる。パケットがロスしても、影響は該当 Stream に閉じる。
 
-![QUIC (HTTP/3) の Stream 独立性](hol-quic.png)
-
-```
-  // UDP データグラム (受信側)
-  [A][B][A][C][✕][B][C][A]...
-                ↑ ロス (後続のデータはブロックされない)
-
-  // QUIC Stream (アプリケーションから見た状態)
-  Stream A: ■ ■ □ □ □   ← 再送待ち
-  Stream B: ■ ■ ■ ■ ■   ← 影響なし
-  Stream C: ■ ■ ■ ■ ■   ← 影響なし
-
-  ■ 受信済み  □ 再送待ち  ✕ ロスしたパケット
-```
+![QUIC (HTTP/3) の Stream 独立性](assets/hol-quic.png)
 
 MoQ はこの性質を活かし、映像・音声のデータを適切な粒度で Stream に分けて送信する。詳しくは後述する。
 
