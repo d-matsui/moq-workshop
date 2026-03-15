@@ -213,30 +213,17 @@ Track: "Alice の映像 (SVC)"
 
 MoQT では、Publisher (送信側) と Subscriber (受信側) が Relay (中継サーバー) を介してデータをやりとりする。
 
-```
-Publisher ──→ Relay ──→ Subscriber
-```
+![Relay の基本構造](assets/relay_basic_structure.png)
 
 Relay は Object を下流の Subscriber に転送 (fan-out) する。そのため、Publisher は全 Subscriber に直接送る必要がない。
 
-```
-Publisher ── Relay ──→ Subscriber
-               ├─────→ Subscriber
-               └─────→ Subscriber
-```
+![Relay の fan-out](assets/relay_fanout.png)
 
 また、Relay は Publisher から見ると Subscriber、Subscriber から見ると Publisher として振る舞う。
 そのため、Relay 同士も接続でき、多段に配置すればさらに多くの Subscriber に配信できる。
 
-```
-Publisher ── Relay ──→ Relay ──→ Subscriber
-               │         ├─────→ Subscriber
-               │         └─────→ Subscriber
-               │
-               └─────→ Relay ──→ Subscriber
-                         ├─────→ Subscriber
-                         └─────→ Subscriber
-```
+![Relay の多段配置](assets/relay_multihop.png)
+[▶ アニメーションを見る](https://github.com/user-attachments/assets/6c56b3ed-8e4c-4d94-a39c-a3bcc90479ef)
 
 このように、Relay の追加によって配信規模をスケールさせることができる。
 
